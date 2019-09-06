@@ -13,6 +13,9 @@
 #
 # === Parameters
 #
+# [*key*]
+#   The path to key file
+#
 # [*key_bits*]
 #   The number of bits of the RSA public key to generate.  If not specified,
 #   defaults to 1024.
@@ -28,6 +31,9 @@
 # [*key_mode*]
 #   The desired permissions mode for the keypair file, in symbolic or numeric
 #   notation.  If not specified, defaults to "0600".
+#
+# [*cert*]
+#   The path to certificate file
 #
 # [*cert_days*]
 #   The validity period of the X.509 certificate, in days.  If not specified,
@@ -88,61 +94,64 @@
 # limitations under the License.
 
 define openssl::self_signed_certificate (
-  $key_bits=1024,
-  $key_owner="root",
-  $key_group="root",
-  $key_mode="0600",
-  $cert_days=365,
-  $cert_country=undef,
-  $cert_state=undef,
-  $cert_locality=undef,
-  $cert_organization=undef,
-  $cert_common_names=[],
-  $cert_email_address=undef) {
+  $key                = "/etc/ssl/private/${name}.key",
+  $key_bits           = 1024,
+  $key_owner          = 'root',
+  $key_group          = 'root',
+  $key_mode           = '0600',
+  $cert               = "/etc/ssl/${name}.pem",
+  $cert_days          = 365,
+  $cert_country       = undef,
+  $cert_state         = undef,
+  $cert_locality      = undef,
+  $cert_organization  = undef,
+  $cert_common_names  = [],
+  $cert_email_address = undef
+) {
   include openssl::setup
 
   $openssl_cnf = "${::puppet_vardir}/openssl/${name}.cnf"
-  $key = "/etc/ssl/private/${name}.key"
-  $cert = "/etc/ssl/${name}.pem"
 
   file { $openssl_cnf:
     content => template("${module_name}/openssl.cnf.erb"),
-    owner => root,
-    group => root,
-    mode => "0600",
+    owner   => 'root',
+    group   => 'root',
+    mode    => '0600',
   }
 
   # Generate an RSA private key in /etc/ssl/private, with the right mode.
   # Re-generate the private key when the config changes, esp. the number of
   # bits.
   exec { "openssl gen-private-key ${key}":
-    command => "/usr/bin/openssl genrsa -out ${key} ${key_bits}",
-    onlyif => "/usr/bin/test ${key} -ot ${openssl_cnf}",
-    require => [Package["openssl"], File[$openssl_cnf]],
+    command   => "/usr/bin/openssl genrsa -out ${key} ${key_bits}",
+    onlyif    => "/usr/bin/test ${key} -ot ${openssl_cnf}",
+    require   => [Package["openssl"], File[$openssl_cnf]],
     subscribe => File[$openssl_cnf],
-    user => root,
-    group => root,
+    user      => 'root',
+    group     => 'root',
   }
+
   file { $key:
     require => Exec["openssl gen-private-key ${key}"],
-    owner => $key_owner,
-    group => $key_group,
-    mode => $key_mode,
+    owner   => $key_owner,
+    group   => $key_group,
+    mode    => $key_mode,
   }
 
   # Generate a self-signed X.509 certificate using the private key.
   exec { "openssl req-self-signed-x509 ${cert}":
-    command => "/usr/bin/openssl req -config ${openssl_cnf} -new -batch -x509 -nodes -days ${cert_days} -out ${cert} -key ${key}",
-    onlyif => "/usr/bin/test ${cert} -ot ${openssl_cnf} -o ${cert} -ot ${key}",
-    require => [Package["openssl"], File[$openssl_cnf], File[$key]],
+    command   => "/usr/bin/openssl req -config ${openssl_cnf} -new -batch -x509 -nodes -days ${cert_days} -out ${cert} -key ${key}",
+    onlyif    => "/usr/bin/test ${cert} -ot ${openssl_cnf} -o ${cert} -ot ${key}",
+    require   => [Package["openssl"], File[$openssl_cnf], File[$key]],
     subscribe => [File[$openssl_cnf], File[$key]],
-    user => root,
-    group => root,
+    user      => 'root',
+    group     => 'root',
   }
+
   file { $cert:
     require => Exec["openssl req-self-signed-x509 ${cert}"],
-    owner => root,
-    group => root,
-    mode => "0644",
+    owner   => 'root',
+    group   => 'root',
+    mode    => '0644',
   }
 }
